@@ -106,6 +106,7 @@ type
   TksTableViewItemButton = class;
   TksTableViewSelectionOptions = class;
   TksTableViewItemEmbeddedDateEdit = class;
+  TksTableViewItemEmbeddedComboEdit = class;
  // TksTableViewItemBadge = class;
 
   TksTableItemAlign = (Leading, Center, Trailing, Fit);
@@ -143,6 +144,7 @@ type
   TksTableViewSelectPickerItem = procedure(Sender: TObject; AItem: TksTableViewItem; ASelected: string; var AAllow: Boolean) of object;
   TksTableViewEmbeddedEditChange = procedure(Sender: TObject; ARow: TksTableViewItem; AEdit: TksTableViewItemEmbeddedBaseEdit; AText: string) of object;
   TksTableViewEmbeddedDateEditChange = procedure(Sender: TObject; ARow: TksTableViewItem; ADateEdit: TksTableViewItemEmbeddedDateEdit; ADate: TDateTime) of object;
+  TksTableViewEmbeddedComboEditChange = procedure(Sender: TObject; ARow: TksTableViewItem; AComboEdit: TksTableViewItemEmbeddedComboEdit; AText: string) of object;
   TksTableViewScrollChangeEvent = procedure(Sender: TObject; AScrollPos, AMaxScrollLimit: single) of object;
   TksTableViewCanDragItemEvent = procedure(Sender: TObject; ADragRow: TksTableViewItem; var AllowDrag: Boolean) of object;
   TksTableViewCanDropItemEvent = procedure(Sender: TObject; ADragRow, ADropRow: TksTableViewItem; var AllowDrop: Boolean)  of object;
@@ -360,6 +362,30 @@ type
     procedure DisableEvents; override;
   public
     property Date: TDateTime read GetDate write SetDate;
+  end;
+
+  //---------------------------------------------------------------------------------------
+
+  // TksTableViewItemEmbeddedComboEdit
+
+  TksTableViewItemEmbeddedComboEdit = class(TksTableViewItemEmbeddedControl)
+  private
+    function GetEditControl: TComboBox;
+    procedure DoComboChanged(Sender: TObject);
+    function GetItemIndex: Integer;
+    function GetItems: TStrings;
+    function GetText: string;
+    procedure SetItemIndex(const Value: Integer);
+    procedure SetItems(const Value: TStrings);
+    procedure SetText(const Value: string);
+  protected
+    function CreateControl: TStyledControl; override;
+    procedure EnableEvents; override;
+    procedure DisableEvents; override;
+  public
+    property Text: string read GetText write SetText;
+    property ItemIndex: Integer read GetItemIndex write SetItemIndex;
+    property Items: TStrings read GetItems write SetItems;
   end;
 
   //---------------------------------------------------------------------------------------
@@ -885,6 +911,7 @@ type
     function AddButton(AStyle: TksTableViewButtonStyle; const ATintColor: TAlphaColor = claNull): TksTableViewItemButton; overload;
     function AddEdit(AX, AY, AWidth: single; AText: string; const AStyle: TksEmbeddedEditStyle = TksEmbeddedEditStyle.ksEditNormal): TksTableViewItemEmbeddedEdit;
     function AddDateEdit(AX, AY, AWidth: single; ADate: TDateTime): TksTableViewItemEmbeddedDateEdit;
+    function AddComboEdit(AX, AY, AWidth: single; AText, AValueList: string): TksTableViewItemEmbeddedComboEdit;
     function AddSwitch(x: single; AIsChecked: Boolean; const AAlign: TksTableItemAlign = TksTableItemAlign.Trailing): TksTableViewItemSwitch;
     function AddTable(AX, AY, AColWidth, ARowHeight: single; AColCount, ARowCount: integer): TksTableViewItemTable;
     property AbsoluteIndex: integer read FAbsoluteIndex;
@@ -1606,6 +1633,7 @@ type
 
     FItemObjectMouseUpEvent: TksTableViewItemClickEvent;
     FMouseEventsEnabledCounter: integer;
+    FOnEmbeddedComboEditChange: TksTableViewEmbeddedComboEditChange;
     function GetViewPort: TRectF;
     procedure UpdateStickyHeaders;
     procedure SetScrollViewPos(const Value: single; const AAnimate: Boolean = False);
@@ -1650,6 +1678,7 @@ type
     procedure DoEmbeddedEditChange(AItem: TksTableViewItem; AEmbeddedEdit: TksTableViewItemEmbeddedBaseEdit);
     procedure SetSelectionOptions(const Value: TksTableViewSelectionOptions);
     procedure DoEmbeddedDateEditChange(AItem: TksTableViewItem; AEmbeddedDateEdit: TksTableViewItemEmbeddedDateEdit);
+    procedure DoEmbeddedComboEditChange(AItem: TksTableViewItem; AEmbeddedComboEdit: TksTableViewItemEmbeddedComboEdit);
     procedure SetAccessoryOptions(const Value: TksTableViewAccessoryOptions);
     procedure SetAppearence(const Value: TksTableViewAppearence);
     procedure SetBackgroundText(const Value: TksTableViewBackgroundText);
@@ -1775,6 +1804,7 @@ type
     property OnDeleteItem: TKsTableViewDeleteItemEvent read FOnDeleteItem write FOnDeleteItem;
     property OnEmbeddedEditChange: TksTableViewEmbeddedEditChange read FOnEmbeddedEditChange write FOnEmbeddedEditChange;
     property OnEmbeddedDateEditChange: TksTableViewEmbeddedDateEditChange read FOnEmbeddedDateEditChange write FOnEmbeddedDateEditChange;
+    property OnEmbeddedComboEditChange: TksTableViewEmbeddedComboEditChange read FOnEmbeddedComboEditChange write FOnEmbeddedComboEditChange;
     property OnIndicatorExpand: TksTableViewRowIndicatorExpandEvent read FOnIndicatorExpand write FOnIndicatorExpand;
     property OnItemActionButtonClick: TksItemActionButtonClickEvent read FOnItemActionButtonClick write FOnItemActionButtonClick;
     property OnItemCheckmarkChanged: TksItemChecMarkChangedEvent read FOnItemChecMarkChanged write FOnItemChecMarkChanged;
@@ -2874,6 +2904,19 @@ begin
   Result := AddButton(44, '', ATintColor);
   Result.Width := 44;
   Result.Height := 44;
+  Changed;
+end;
+
+function TksTableViewItem.AddComboEdit(AX, AY, AWidth: single;
+  AText, AValueList: string): TksTableViewItemEmbeddedComboEdit;
+begin
+  Result := TksTableViewItemEmbeddedComboEdit.Create(Self);
+  Result.Width := AWidth;
+  Result.FPlaceOffset := PointF(AX, AY);
+  Result.VertAlign := TksTableItemAlign.Center;
+  Result.Items.Text := AValueList;
+  Result.Text := AText;
+  FObjects.Add(Result);
   Changed;
 end;
 
@@ -4678,6 +4721,13 @@ begin
     FOnEmbeddedEditChange(Self, AItem, AEmbeddedEdit, AEmbeddedEdit.Text);
 end;
 
+procedure TksTableView.DoEmbeddedComboEditChange(AItem: TksTableViewItem;
+  AEmbeddedComboEdit: TksTableViewItemEmbeddedComboEdit);
+begin
+  if Assigned(FOnEmbeddedComboEditChange) then
+    FOnEmbeddedComboEditChange(Self, AItem, AEmbeddedComboEdit, AEmbeddedComboEdit.Text);
+end;
+
 procedure TksTableView.DoEmbeddedDateEditChange(AItem: TksTableViewItem; AEmbeddedDateEdit: TksTableViewItemEmbeddedDateEdit);
 begin
   if Assigned(FOnEmbeddedDateEditChange) then
@@ -5271,8 +5321,8 @@ end;
 
 procedure TksTableView.MouseDown(Button: TMouseButton; Shift: TShiftState;
   x, y: single);
-var
-  AConsumesClick: Boolean;
+{var
+  AConsumesClick: Boolean;}
 begin
 
   if (UpdateCount > 0) or (FMouseEventsEnabledCounter > 0) then
@@ -5308,7 +5358,7 @@ begin
 
     if (FMouseDownObject <> nil) then
     begin
-      AConsumesClick := FMouseDownObject.ConsumesClick;
+      //AConsumesClick := FMouseDownObject.ConsumesClick;
       FMouseDownItem.DoClick(FMouseDownPoint.x, (FMouseDownPoint.y - FMouseDownItem.ItemRect.Top) + ScrollViewPos);
       Exit;
       //if AConsumesClick then
@@ -9173,6 +9223,64 @@ end;
 procedure TksAniCalc.UpdatePosImmediately;
 begin
   inherited UpdatePosImmediately(True);
+end;
+
+function TksTableViewItemEmbeddedComboEdit.CreateControl: TStyledControl;
+begin
+  Result := TComboBox.Create(FTableItem.FTableView);
+end;
+
+procedure TksTableViewItemEmbeddedComboEdit.DisableEvents;
+begin
+  GetEditControl.OnChange := nil;
+end;
+
+procedure TksTableViewItemEmbeddedComboEdit.DoComboChanged(Sender: TObject);
+begin
+  FTableItem.TableView.DoEmbeddedComboEditChange(FTableItem, Self);
+end;
+
+procedure TksTableViewItemEmbeddedComboEdit.EnableEvents;
+begin
+  GetEditControl.OnChange := DoComboChanged;
+end;
+
+function TksTableViewItemEmbeddedComboEdit.GetEditControl: TComboBox;
+begin
+  Result := (FControl as TComboBox);
+end;
+
+function TksTableViewItemEmbeddedComboEdit.GetItemIndex: Integer;
+begin
+  Result := GetEditControl.ItemIndex;
+end;
+
+function TksTableViewItemEmbeddedComboEdit.GetItems: TStrings;
+begin
+  Result := GetEditControl.Items;
+end;
+
+function TksTableViewItemEmbeddedComboEdit.GetText: string;
+begin
+  if GetEditControl.Selected <> nil then
+    Result := GetEditControl.Selected.Text
+  else
+    Result := EmptyStr;
+end;
+
+procedure TksTableViewItemEmbeddedComboEdit.SetItemIndex(const Value: Integer);
+begin
+  GetEditControl.ItemIndex := Value;
+end;
+
+procedure TksTableViewItemEmbeddedComboEdit.SetItems(const Value: TStrings);
+begin
+  GetEditControl.Items.Assign(Value);
+end;
+
+procedure TksTableViewItemEmbeddedComboEdit.SetText(const Value: string);
+begin
+  GetEditControl.ItemIndex := GetEditControl.Items.IndexOf(Value);
 end;
 
 
